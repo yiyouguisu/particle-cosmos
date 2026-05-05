@@ -2,6 +2,8 @@
 
 Interactive 3D particle visualization with 10,000 particles morphing between 17 mathematical formations, real-time generative audio, and mouse-driven physics.
 
+English | [中文](README_zh.md)
+
 ## Features
 
 - **17 formations** — Lorenz, Clifford, Aizawa, Thomas, Rössler, Halvorsen attractors; Möbius, Klein, Trefoil, Cinquefoil knots; Torus, Shell, Helix, Harmonics, Rhodonea surfaces; Diffuse cloud; Milkyway cascade
