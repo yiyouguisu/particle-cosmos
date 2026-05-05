@@ -1,73 +1,52 @@
-# React + TypeScript + Vite
+# Particle Cosmos
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interactive 3D particle visualization with 10,000 particles morphing between 17 mathematical formations, real-time generative audio, and mouse-driven physics.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **17 formations** — Lorenz, Clifford, Aizawa, Thomas, Rössler, Halvorsen attractors; Möbius, Klein, Trefoil, Cinquefoil knots; Torus, Shell, Helix, Harmonics, Rhodonea surfaces; Diffuse cloud; Milkyway cascade
+- **Living motion** — Time-parametrized formations continuously evolve (attractors drift, knots rotate, galaxy shimmers)
+- **Magnetic field interaction** — Mouse movement creates tangential swirl (slow) or radial tear (fast), with dwell-strengthening effect
+- **Click effects** — Shockwave (single click), blackhole attract-explode (double click), gravitational collapse (long press)
+- **Dynamic light chain** — Spiral roaming chain that chases the mouse, with per-formation color gradients
+- **Generative audio** — FM drone, resonant noise, sub-bass, random bell events, pentatonic melody — all synthesized in real-time
+- **Smooth morphing** — 3.5s staggered easing transitions between formations
 
-## React Compiler
+## Getting Started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Controls
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+| Input | Action |
+|-------|--------|
+| Mouse move | Magnetic field — swirl or tear particles |
+| Click | Shockwave — expanding ring force |
+| Double click | Blackhole — attract then explode |
+| Long press (>0.3s) | Gravitational collapse, release to explode |
+| Scroll / Arrow keys | Cycle formations |
+| Space | Pause auto-cycle |
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Tech Stack
+
+- React + TypeScript
+- Three.js (via @react-three/fiber)
+- Custom GLSL shaders (particle + line rendering)
+- Zustand (state management)
+- Web Audio API (generative audio)
+- Vite (build tooling)
+
+## Architecture
+
 ```
+User input → useMouseTracking → Zustand store → ParticleField useFrame loop
+  → Formation generators + physics forces → Custom shaders → GPU
+  → AudioEngine (independent)
+```
+
+## License
+
+MIT
