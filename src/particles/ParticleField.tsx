@@ -193,6 +193,7 @@ export function ParticleField() {
   const morphTimeRef = useRef(0)
   const isMorphing = useRef(false)
   const morphDuration = 3.5
+  const morphStoreCounterRef = useRef(0)
 
   // Living formation trajectory recomputation throttle
   const throttleCounterRef = useRef(0)
@@ -250,6 +251,7 @@ export function ParticleField() {
   const lastRotDirRef = useRef(1) // inertial rotation direction for dwell
   const chainSmoothedPositionsRef = useRef(new Float32Array(MAX_CHAIN_LENGTH_UPPER * 3))
   const prevChainRef = useRef<number[]>([])
+  const fadeDirtyRef = useRef(true) // milkyway fade needs update
 
   // Handle pointer events for click effects
   const pointerDownTime = useRef(0)
@@ -320,6 +322,7 @@ export function ParticleField() {
     if (!pointsRef.current) return
 
     const time = state.clock.elapsedTime
+    const nowMs = Date.now()
     const geometry = pointsRef.current.geometry
     const posAttr = geometry.attributes.position as THREE.BufferAttribute
     const prevPositions = prevPositionsRef.current
@@ -329,6 +332,7 @@ export function ParticleField() {
     const storeState = useStore.getState()
     const mouse = storeState.mouse
     const formation = storeState.formation
+    const currentFormationName = FORMATION_NAMES[formation.currentIndex]
 
     // Update shaderUniforms
     shaderUniforms.uTime.value = time
@@ -369,6 +373,8 @@ export function ParticleField() {
     if (formation.targetIndex !== lastFormationRef.current && !isMorphing.current) {
       isMorphing.current = true
       morphTimeRef.current = 0
+      morphStoreCounterRef.current = 0
+      fadeDirtyRef.current = true
 
       for (let i = 0; i < TOTAL_COUNT * 3; i++) {
         prevPositions[i] = posAttr.array[i]
@@ -423,7 +429,10 @@ export function ParticleField() {
       }
 
       shaderUniforms.uMorphProgress.value = rawProgress
-      setMorphProgress(rawProgress)
+      morphStoreCounterRef.current++
+      if (morphStoreCounterRef.current % 5 === 0 || rawProgress >= 1) {
+        setMorphProgress(rawProgress)
+      }
 
       if (rawProgress >= 1) {
         isMorphing.current = false
@@ -439,7 +448,7 @@ export function ParticleField() {
       }
     } else {
       // Living motion: compute raw targets into temp buffer, smoothly lerp live buffer toward them
-      const currentName = FORMATION_NAMES[formation.currentIndex]
+      const currentName = currentFormationName
       const isLiving = !!LIVING_MOTION[currentName]
 
       if (isLiving) {
@@ -543,149 +552,77 @@ export function ParticleField() {
       }
     }
 
-    // ===== Click effects (squared distance early-out) =====
+    // ===== Click effects (merged single-pass) =====
 
-    // Shockwave
-    if (clickRef.current.active && clickRef.current.type === 'shockwave') {
+    // Advance time and precompute parameters for all active effects
+    const clickActive = clickRef.current.active
+    const clickType = clickRef.current.type
+    let hasAnyEffect = false
+
+    // Shockwave / Blackhole params (mutually exclusive via clickRef)
+    let swActive = false, swCx = 0, swCy = 0, swRingRadius = 0, swRingWidth = 0, swDecay = 0
+    let bhActive = false, bhStage = 0, bhCx = 0, bhCy = 0, bhRadius = 0, bhCosA = 0, bhSinA = 0, bhExplodeStr = 0
+
+    if (clickActive && clickType === 'shockwave') {
       clickRef.current.time += delta
       const ct = clickRef.current.time
-      const baseRingRadius = ct * 1.5
-      const baseRingWidth = 0.2
-      const cx = clickRef.current.x
-      const cy = clickRef.current.y
-      for (let i = 0; i < TOTAL_COUNT; i++) {
-        const i3 = i * 3
-        const pz = posAttr.array[i3 + 2]
-        const zScale = Math.max(MIN_Z_DIST, CAMERA_Z - pz) / CAMERA_Z
-        const adjCx = cx * zScale
-        const adjCy = cy * zScale
-        const ringRadius = baseRingRadius * zScale
-        const ringWidth = baseRingWidth * zScale
-        const outerSq = (ringRadius + ringWidth) * (ringRadius + ringWidth)
-        const innerR = Math.max(0, ringRadius - ringWidth)
-        const innerSq = innerR * innerR
-        const dx = posAttr.array[i3] - adjCx
-        const dy = posAttr.array[i3 + 1] - adjCy
-        const distSq = dx * dx + dy * dy
-        if (distSq > outerSq || distSq < innerSq) continue
-        const dist = Math.sqrt(distSq)
-        const distFromRing = Math.abs(dist - ringRadius)
-        if (distFromRing < ringWidth && dist > 0.01) {
-          const strength = (1 - distFromRing / ringWidth) * (1 - ct / 2) * 0.08
-          velocities[i3] += (dx / dist) * strength
-          velocities[i3 + 1] += (dy / dist) * strength
-        }
+      swActive = ct <= 2
+      if (swActive) {
+        hasAnyEffect = true
+        swCx = clickRef.current.x
+        swCy = clickRef.current.y
+        swRingRadius = ct * 1.5
+        swRingWidth = 0.2
+        swDecay = 1 - ct / 2
       }
-      if (ct > 2) clickRef.current.active = false
-    }
-
-    // Black hole (double-click)
-    if (clickRef.current.active && clickRef.current.type === 'blackhole') {
+    } else if (clickActive && clickType === 'blackhole') {
       clickRef.current.time += delta
       const ct = clickRef.current.time
-      const cx = clickRef.current.x
-      const cy = clickRef.current.y
+      bhCx = clickRef.current.x
+      bhCy = clickRef.current.y
       const baseRadius = 1.5
       if (ct < 1.0) {
-        for (let i = 0; i < TOTAL_COUNT; i++) {
-          const i3 = i * 3
-          const pz = posAttr.array[i3 + 2]
-          const zScale = Math.max(MIN_Z_DIST, CAMERA_Z - pz) / CAMERA_Z
-          const adjCx = cx * zScale
-          const adjCy = cy * zScale
-          const radius = baseRadius * zScale
-          const radiusSq = radius * radius
-          const dx = adjCx - posAttr.array[i3]
-          const dy = adjCy - posAttr.array[i3 + 1]
-          const distSq = dx * dx + dy * dy
-          if (distSq < radiusSq && distSq > 0.0004) {
-            const dist = Math.sqrt(distSq)
-            const strength = (1 - dist / radius) * 0.02
-            const angle = Math.atan2(dy, dx)
-            const tangentAngle = angle + Math.PI * 0.3
-            velocities[i3] += Math.cos(tangentAngle) * strength + dx / dist * strength * 0.5
-            velocities[i3 + 1] += Math.sin(tangentAngle) * strength + dy / dist * strength * 0.5
-          }
-        }
+        bhStage = 1 // attract
+        bhActive = true
+        hasAnyEffect = true
+        bhRadius = baseRadius
+        bhCosA = Math.cos(Math.PI * 0.3)
+        bhSinA = Math.sin(Math.PI * 0.3)
       } else if (ct < 1.2) {
-        const explodeStrength = (1 - (ct - 1.0) / 0.2) * 0.15
-        for (let i = 0; i < TOTAL_COUNT; i++) {
-          const i3 = i * 3
-          const pz = posAttr.array[i3 + 2]
-          const zScale = Math.max(MIN_Z_DIST, CAMERA_Z - pz) / CAMERA_Z
-          const adjCx = cx * zScale
-          const adjCy = cy * zScale
-          const radius = baseRadius * zScale
-          const radiusSq = radius * radius
-          const dx = posAttr.array[i3] - adjCx
-          const dy = posAttr.array[i3 + 1] - adjCy
-          const distSq = dx * dx + dy * dy
-          if (distSq < radiusSq && distSq > 0.0001) {
-            const dist = Math.sqrt(distSq)
-            velocities[i3] += (dx / dist) * explodeStrength
-            velocities[i3 + 1] += (dy / dist) * explodeStrength
-          }
-        }
+        bhStage = 2 // explode
+        bhActive = true
+        hasAnyEffect = true
+        bhRadius = baseRadius
+        bhExplodeStr = (1 - (ct - 1.0) / 0.2) * 0.15
       } else if (ct > 3) {
         clickRef.current.active = false
       }
     }
 
-    // Long press: gravitational collapse
-    if (longPressRef.current.active && !longPressRef.current.released) {
-      const holdTime = (Date.now() - longPressRef.current.startTime) / 1000
-      if (holdTime > 0.3) {
-        const baseRadius = 0.5 + holdTime * 0.3
-        const collapseForce = 0.005 + holdTime * 0.003
-        const lpx = longPressRef.current.x
-        const lpy = longPressRef.current.y
-        for (let i = 0; i < TOTAL_COUNT; i++) {
-          const i3 = i * 3
-          const pz = posAttr.array[i3 + 2]
-          const zScale = Math.max(MIN_Z_DIST, CAMERA_Z - pz) / CAMERA_Z
-          const adjLpx = lpx * zScale
-          const adjLpy = lpy * zScale
-          const radius = baseRadius * zScale
-          const radiusSq = radius * radius
-          const dx = adjLpx - posAttr.array[i3]
-          const dy = adjLpy - posAttr.array[i3 + 1]
-          const distSq = dx * dx + dy * dy
-          if (distSq < radiusSq && distSq > 0.0004) {
-            const dist = Math.sqrt(distSq)
-            const strength = (1 - dist / radius) * collapseForce
-            velocities[i3] += (dx / dist) * strength
-            velocities[i3 + 1] += (dy / dist) * strength
-          }
-        }
-      }
-    }
+    // Longpress params (independent of click)
+    const lp = longPressRef.current
+    let lpcActive = false, lpcCx = 0, lpcCy = 0, lpcRadius = 0, lpcForce = 0
+    let lprActive = false, lprCx = 0, lprCy = 0, lprRadius = 0, lprDecay = 0
 
-    // Long press release explosion
-    if (longPressRef.current.released) {
-      const releaseElapsed = (Date.now() - longPressRef.current.releaseTime) / 1000
+    if (lp.active && !lp.released) {
+      const holdTime = (nowMs - lp.startTime) / 1000
+      if (holdTime > 0.3) {
+        lpcActive = true
+        hasAnyEffect = true
+        lpcCx = lp.x
+        lpcCy = lp.y
+        lpcRadius = 0.5 + holdTime * 0.3
+        lpcForce = 0.005 + holdTime * 0.003
+      }
+    } else if (lp.released) {
+      const releaseElapsed = (nowMs - lp.releaseTime) / 1000
       if (releaseElapsed < 0.3) {
-        const explodeForce = longPressRef.current.holdDuration * 0.1
-        const lpx = longPressRef.current.x
-        const lpy = longPressRef.current.y
-        const baseRadius = 2.0
-        for (let i = 0; i < TOTAL_COUNT; i++) {
-          const i3 = i * 3
-          const pz = posAttr.array[i3 + 2]
-          const zScale = Math.max(MIN_Z_DIST, CAMERA_Z - pz) / CAMERA_Z
-          const adjLpx = lpx * zScale
-          const adjLpy = lpy * zScale
-          const radius = baseRadius * zScale
-          const radiusSq = radius * radius
-          const dx = posAttr.array[i3] - adjLpx
-          const dy = posAttr.array[i3 + 1] - adjLpy
-          const distSq = dx * dx + dy * dy
-          if (distSq < radiusSq && distSq > 0.0001) {
-            const dist = Math.sqrt(distSq)
-            const strength = (1 - dist / radius) * explodeForce * (1 - releaseElapsed / 0.3)
-            velocities[i3] += (dx / dist) * strength
-            velocities[i3 + 1] += (dy / dist) * strength
-          }
-        }
+        lprActive = true
+        hasAnyEffect = true
+        lprCx = lp.x
+        lprCy = lp.y
+        lprRadius = 2.0
+        lprDecay = (1 - releaseElapsed / 0.3) * lp.holdDuration * 0.1
       } else {
         longPressRef.current = {
           active: false, x: 0, y: 0,
@@ -694,11 +631,115 @@ export function ParticleField() {
       }
     }
 
+    // Merged single-pass loop
+    if (hasAnyEffect) {
+      for (let i = 0; i < TOTAL_COUNT; i++) {
+        const i3 = i * 3
+        const pz = posAttr.array[i3 + 2]
+        const zScale = Math.max(MIN_Z_DIST, CAMERA_Z - pz) / CAMERA_Z
+        const px = posAttr.array[i3]
+        const py = posAttr.array[i3 + 1]
+
+        // Shockwave: ring force
+        if (swActive) {
+          const adjCx = swCx * zScale
+          const adjCy = swCy * zScale
+          const ringRadius = swRingRadius * zScale
+          const ringWidth = swRingWidth * zScale
+          const outerSq = (ringRadius + ringWidth) * (ringRadius + ringWidth)
+          const innerR = Math.max(0, ringRadius - ringWidth)
+          const innerSq = innerR * innerR
+          const dx = px - adjCx
+          const dy = py - adjCy
+          const distSq = dx * dx + dy * dy
+          if (distSq <= outerSq && distSq >= innerSq) {
+            const dist = Math.sqrt(distSq)
+            const distFromRing = Math.abs(dist - ringRadius)
+            if (distFromRing < ringWidth && dist > 0.01) {
+              const strength = (1 - distFromRing / ringWidth) * swDecay * 0.08
+              velocities[i3] += (dx / dist) * strength
+              velocities[i3 + 1] += (dy / dist) * strength
+            }
+          }
+        }
+
+        // Blackhole: attract (tangent + radial) or explode (radial)
+        if (bhActive) {
+          const adjCx = bhCx * zScale
+          const adjCy = bhCy * zScale
+          const radius = bhRadius * zScale
+          const radiusSq = radius * radius
+          if (bhStage === 1) {
+            const dx = adjCx - px
+            const dy = adjCy - py
+            const distSq = dx * dx + dy * dy
+            if (distSq < radiusSq && distSq > 0.0004) {
+              const dist = Math.sqrt(distSq)
+              const invDist = 1 / dist
+              const nx = dx * invDist
+              const ny = dy * invDist
+              const strength = (1 - dist / radius) * 0.02
+              velocities[i3] += (nx * bhCosA - ny * bhSinA) * strength + nx * strength * 0.5
+              velocities[i3 + 1] += (nx * bhSinA + ny * bhCosA) * strength + ny * strength * 0.5
+            }
+          } else {
+            const dx = px - adjCx
+            const dy = py - adjCy
+            const distSq = dx * dx + dy * dy
+            if (distSq < radiusSq && distSq > 0.0001) {
+              const dist = Math.sqrt(distSq)
+              velocities[i3] += (dx / dist) * bhExplodeStr
+              velocities[i3 + 1] += (dy / dist) * bhExplodeStr
+            }
+          }
+        }
+
+        // Longpress: gravitational collapse
+        if (lpcActive) {
+          const adjCx = lpcCx * zScale
+          const adjCy = lpcCy * zScale
+          const radius = lpcRadius * zScale
+          const radiusSq = radius * radius
+          const dx = adjCx - px
+          const dy = adjCy - py
+          const distSq = dx * dx + dy * dy
+          if (distSq < radiusSq && distSq > 0.0004) {
+            const dist = Math.sqrt(distSq)
+            const strength = (1 - dist / radius) * lpcForce
+            velocities[i3] += (dx / dist) * strength
+            velocities[i3 + 1] += (dy / dist) * strength
+          }
+        }
+
+        // Longpress release: explosion
+        if (lprActive) {
+          const adjCx = lprCx * zScale
+          const adjCy = lprCy * zScale
+          const radius = lprRadius * zScale
+          const radiusSq = radius * radius
+          const dx = px - adjCx
+          const dy = py - adjCy
+          const distSq = dx * dx + dy * dy
+          if (distSq < radiusSq && distSq > 0.0001) {
+            const dist = Math.sqrt(distSq)
+            const strength = (1 - dist / radius) * lprDecay
+            velocities[i3] += (dx / dist) * strength
+            velocities[i3 + 1] += (dy / dist) * strength
+          }
+        }
+      }
+    }
+
+    // Post-loop: finalize expired effects
+    if (clickActive && clickType === 'shockwave' && clickRef.current.time > 2) {
+      clickRef.current.active = false
+    }
+
     posAttr.needsUpdate = true
 
     // ===== Per-particle fade for milkyway waterfall =====
     const fadeAttr = geometry.attributes.fade as THREE.BufferAttribute
-    const currentFormName = FORMATION_NAMES[formation.currentIndex]
+    const currentFormName = currentFormationName
     if (!isMorphing.current && currentFormName === 'milkyway') {
       // Sky particles (high Y) stay fully visible
       // Falling particles fade out as they descend
@@ -718,7 +759,7 @@ export function ParticleField() {
         }
       }
       fadeAttr.needsUpdate = true
-    } else if (isMorphing.current) {
+    } else if (isMorphing.current && fadeDirtyRef.current) {
       // During morph: lerp all fades toward 1.0
       let needsFadeUpdate = false
       for (let i = 0; i < TOTAL_COUNT; i++) {
@@ -727,7 +768,11 @@ export function ParticleField() {
           needsFadeUpdate = true
         }
       }
-      if (needsFadeUpdate) fadeAttr.needsUpdate = true
+      if (needsFadeUpdate) {
+        fadeAttr.needsUpdate = true
+      } else {
+        fadeDirtyRef.current = false // all fades at 1.0, stop iterating
+      }
     }
 
     // ===== Auto-cycle timer =====
@@ -751,7 +796,7 @@ export function ParticleField() {
     const effectiveMaxLength = Math.round(lerpV(prevCC.maxLength, targCC.maxLength))
 
     // Shorten chain during living motion — particles drift, old nodes go stale fast
-    const chainFormName = FORMATION_NAMES[formation.currentIndex]
+    const chainFormName = currentFormationName
     const chainIsLiving = !isMorphing.current && !!LIVING_MOTION[chainFormName]
     const activeMaxLength = chainIsLiving ? Math.max(5, Math.round(effectiveMaxLength * 0.45)) : effectiveMaxLength
 
@@ -783,7 +828,7 @@ export function ParticleField() {
         smoothed[ci * 3 + 2] += (az - smoothed[ci * 3 + 2]) * CHAIN_SMOOTH_FACTOR
       }
     }
-    prevChainRef.current = chain.slice()
+    prevChainRef.current = chain.length > 0 ? chain.slice() : prevChainRef.current
 
     // Compute average z of chain particles for perspective-corrected chase
     let chainAvgZ = 0
@@ -891,15 +936,19 @@ export function ParticleField() {
     // Particle snap-on collection: scan random subset for nearby particles
     // Project head position to each particle's z-plane for screen-space proximity
     const baseSnapRadius = 0.25
-    // Ensure chain member flags are set (may already be set from main loop, but needed during morphing too)
-    for (let ci = 0; ci < chain.length; ci++) {
-      chainMemberFlags[chain[ci]] = 1
+    // Flags are already set from the main loop (or set here during morphing)
+    if (isMorphing.current) {
+      for (let ci = 0; ci < chain.length; ci++) {
+        chainMemberFlags[chain[ci]] = 1
+      }
     }
     let bestSnapIdx = -1
     let bestSnapDistSq = Infinity
-    const scanSeed = Math.floor(time * 1000)
+    // LCG random — much cheaper than seededRand's sin-based hash
+    let lcgState = (Math.floor(time * 1000) * 1103515245 + 12345) & 0x7fffffff
     for (let s = 0; s < 200; s++) {
-      const idx = Math.floor(seededRand(scanSeed + s * 37) * TOTAL_COUNT)
+      lcgState = (lcgState * 1103515245 + 12345) & 0x7fffffff
+      const idx = Math.floor((lcgState / 0x7fffffff) * TOTAL_COUNT)
       if (chainMemberFlags[idx]) continue
       const pz = posAttr.array[idx * 3 + 2]
       const snapZScale = Math.max(MIN_Z_DIST, CAMERA_Z - pz) / CAMERA_Z
@@ -921,8 +970,8 @@ export function ParticleField() {
     }
     if (bestSnapIdx !== -1) {
       chain.push(bestSnapIdx)
-      while (chain.length > activeMaxLength) {
-        chain.shift()
+      if (chain.length > activeMaxLength) {
+        chain.splice(0, chain.length - activeMaxLength)
       }
     }
 
