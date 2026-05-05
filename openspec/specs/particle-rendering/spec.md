@@ -1,5 +1,5 @@
 ### Requirement: Particle system rendering with Points and ShaderMaterial
-The system SHALL render 10,000 particles using a single `<points>` element with custom ShaderMaterial, replacing the previous InstancedMesh approach. The system SHALL maintain a target frame rate of 60fps on mid-range hardware.
+The system SHALL render 10,000 particles using a single `<points>` element with custom ShaderMaterial, replacing the previous InstancedMesh approach. The system SHALL maintain a target frame rate of 60fps on mid-range hardware. The formation count SHALL be 17.
 
 #### Scenario: Render particle count
 - **WHEN** the scene is fully loaded and rendered

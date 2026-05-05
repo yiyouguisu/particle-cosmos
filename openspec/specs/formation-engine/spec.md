@@ -1,5 +1,5 @@
 ### Requirement: Formation library with mathematical shape generators
-The system SHALL provide a library of at least five distinct mathematical formations, each implemented as a pure function that computes a 3D position for a given particle index and total count.
+The system SHALL provide a library of at least five distinct mathematical formations, each implemented as a pure function that computes a 3D position for a given particle index and total count. The library SHALL include the milkyway cascade formation as the 17th formation.
 
 #### Scenario: Each formation produces unique positions
 - **WHEN** a formation generator is called with index 0 through 9999 and total 10000
@@ -7,7 +7,7 @@ The system SHALL provide a library of at least five distinct mathematical format
 
 #### Scenario: Formations available
 - **WHEN** the formation library is queried
-- **THEN** it provides at least: Diffuse (random field), Lorenz attractor, Fibonacci/golden spiral, Lissajous curves, and Torus surface generators
+- **THEN** it provides at least: Diffuse (random field), Lorenz attractor, Fibonacci/golden spiral, Lissajous curves, Torus surface generators, and the Milkyway cascade formation
 
 ### Requirement: Diffuse formation
 The Diffuse formation SHALL distribute particles randomly across a rectangular field with slight noise-based drift, serving as the default resting state.
@@ -60,7 +60,7 @@ The system SHALL transition particles from the current formation to the next usi
 - **THEN** they continue a subtle oscillating micro-motion (breathing) rather than remaining perfectly static
 
 ### Requirement: Hybrid formation cycling
-The system SHALL auto-cycle through formations on a timer and also allow manual override via user input, with manual actions resetting the auto-timer.
+The system SHALL auto-cycle through formations on a timer and also allow manual override via user input, with manual actions resetting the auto-timer. The formation count SHALL be 17.
 
 #### Scenario: Auto-cycle timing
 - **WHEN** no user interaction occurs for approximately 10 seconds after the last formation switch
@@ -83,5 +83,5 @@ The system SHALL auto-cycle through formations on a timer and also allow manual 
 - **THEN** the auto-cycle timer is paused/resumed, indicated by a subtle UI hint
 
 #### Scenario: Cycle wraps around
-- **WHEN** the formation index reaches the last formation and advances
+- **WHEN** the formation index reaches the last formation (17th) and advances
 - **THEN** it wraps back to the first formation

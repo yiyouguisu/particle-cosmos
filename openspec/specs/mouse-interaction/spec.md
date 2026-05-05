@@ -1,13 +1,17 @@
 ### Requirement: Mouse speed affects interaction intensity
-The intensity of particle interactions SHALL scale with the speed of mouse movement. Slow movement triggers gravity attraction; fast movement triggers repulsion and trail effects. Additionally, mouse speed SHALL drive the light chain chase weight, determining how strongly the light chain head pursues the mouse position. All mouse-to-particle distance calculations SHALL account for perspective projection by adjusting the mouse world coordinate to the particle's z-depth using the formula `adjustedMouse = mouseWorld * (cameraZ - particleZ) / cameraZ`, and interaction radii SHALL scale by the same factor.
+The intensity of particle interactions SHALL scale with the speed of mouse movement. The interaction model uses a magnetic vortex force field: slow movement produces attractive vortex (spiral inward), fast movement produces repulsive vortex (spiral outward), with continuous smoothstep interpolation between regimes. The radial and tangential force components SHALL both use inverse-square falloff. Additionally, mouse speed SHALL drive the light chain chase weight, determining how strongly the light chain head pursues the mouse position. All mouse-to-particle distance calculations SHALL account for perspective projection by adjusting the mouse world coordinate to the particle's z-depth using the formula `adjustedMouse = mouseWorld * (cameraZ - particleZ) / cameraZ`, and interaction radii SHALL scale by the same factor.
 
-#### Scenario: Slow mouse activates gravity field
+#### Scenario: Slow mouse activates magnetic vortex with attraction
 - **WHEN** the user moves the mouse slowly (speed < 2) or is stationary
-- **THEN** nearby particles are gently attracted toward the cursor, with distance calculated using perspective-corrected mouse coordinates at each particle's z-depth
+- **THEN** nearby particles SHALL experience a tangential rotational force combined with radial inward attraction, creating a spiral-inward vortex pattern, with perspective-corrected distance at each particle's z-depth
 
-#### Scenario: Fast mouse activates repulsion and trail
+#### Scenario: Fast mouse activates magnetic vortex with repulsion
 - **WHEN** the user moves the mouse quickly (speed > 5)
-- **THEN** nearby particles are pushed away from the cursor path with perspective-corrected distance, and a glowing trail is visible along the trajectory
+- **THEN** nearby particles SHALL experience a tangential rotational force combined with radial outward repulsion, creating a spiral-outward dispersal pattern, with perspective-corrected distance
+
+#### Scenario: Continuous speed-force regime transition
+- **WHEN** the mouse speed transitions between slow and fast ranges
+- **THEN** the force behavior SHALL change continuously via smoothstep interpolation across the speed range [1, 6], with no abrupt behavioral jumps at any speed threshold
 
 #### Scenario: Mouse speed drives light chain chase weight
 - **WHEN** the mouse speed changes
